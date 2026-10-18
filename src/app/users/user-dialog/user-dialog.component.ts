@@ -12,6 +12,9 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatRadioButton, MatRadioModule } from "@angular/material/radio";
 
+import { CommonModule } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+
 interface DialogData {
   mode: 'create' | 'edit';
   user?: User;
@@ -21,10 +24,10 @@ interface DialogData {
   selector: 'app-user-dialog',
   standalone: true,
   imports: [
-    ReactiveFormsModule, MatDialogModule, MatButtonModule,
+    CommonModule, ReactiveFormsModule, MatDialogModule, MatButtonModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatCheckboxModule,
-    MatRadioButton, MatRadioModule
-],
+    MatRadioButton, MatRadioModule, MatIconModule
+  ],
   templateUrl: './user-dialog.component.html',
   styleUrls: ['./user-dialog.component.css']
 })
@@ -61,7 +64,7 @@ export class UserDialogComponent {
 
     const form = this.fb.group({
       name: [user?.name || '', [Validators.required, Validators.minLength(5)]],
-      mobile: [user?.mobile || '', [Validators.required, Validators.pattern(/^\+?\d{10,15}$/)]],
+      mobile: [{ value: user?.mobile || '', disabled: mode === 'edit' }, [Validators.required, Validators.pattern(/^\+?\d{10,15}$/)]],
       email: [user?.email || '', [Validators.email]],
       ...(mode === 'create' && {
         password: ['', [Validators.required, Validators.minLength(8)]]
@@ -89,7 +92,7 @@ export class UserDialogComponent {
 
     this.isSubmitting.set(true);
 
-    const formValue = this.userForm().value;
+    const formValue = this.userForm().getRawValue();
 
     const userData: any = {
       name: formValue.name,

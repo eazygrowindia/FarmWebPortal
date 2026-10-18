@@ -290,3 +290,20 @@ input, textarea, select {
   font-weight: 600 !important;
 }
 
+/* User Detail Dark Dialog Modal */
+.user-detail-dialog-panel .mat-mdc-dialog-container .mdc-dialog__surface,
+.user-detail-dialog-panel .mat-mdc-dialog-surface,
+.user-detail-dialog-panel .cdk-dialog-container,
+.change-password-dialog-panel .mat-mdc-dialog-container .mdc-dialog__surface,
+.change-password-dialog-panel .mat-mdc-dialog-surface,
+.change-password-dialog-panel .cdk-dialog-container {
+  background-color: #0f1319 !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85) !important;
+  border: 1px solid #1e293b !important;
+  overflow: hidden !important;
+}
+
+
+

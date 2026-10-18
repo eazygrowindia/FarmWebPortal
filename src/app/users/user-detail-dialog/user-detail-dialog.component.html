@@ -1,0 +1,188 @@
+<div class="user-profile-modal">
+  <!-- Top Right Close Button -->
+  <button mat-icon-button class="modal-close-btn" (click)="onClose()" title="Close">
+    <mat-icon>close</mat-icon>
+  </button>
+
+  <!-- Profile Header Banner -->
+  <div class="profile-header">
+    <div class="profile-header-left">
+      <!-- Avatar Circle -->
+      <div class="profile-avatar">
+        {{ initials }}
+      </div>
+
+      <div class="profile-identity">
+        <div class="profile-name-row">
+          <h2 class="profile-name">{{ fullName }}</h2>
+          <span class="profile-role-badge">{{ roleDisplayName }}</span>
+        </div>
+        <div class="profile-sub-info">
+          <mat-icon class="location-icon">place</mat-icon>
+          <span>{{ formattedLocation }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header Action Buttons -->
+    <div class="profile-header-actions">
+      <button type="button" class="header-action-btn btn-message" (click)="onSendMessage()">
+        <mat-icon class="btn-icon">chat_bubble_outline</mat-icon>
+        <span>Message</span>
+      </button>
+
+      <button type="button" class="header-action-btn btn-edit-profile" (click)="onEditProfile()">
+        <mat-icon class="btn-icon">edit</mat-icon>
+        <span>Edit profile</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Metrics / Stats Row -->
+  <div class="profile-metrics-strip">
+    <div class="metric-item">
+      <span class="metric-label">Farm size</span>
+      <span class="metric-value">{{ farmSizeDisplay }}</span>
+    </div>
+
+    <div class="metric-item">
+      <span class="metric-label">Active crops</span>
+      <span class="metric-value">{{ activeCropsCount }}</span>
+    </div>
+
+    <div class="metric-item">
+      <span class="metric-label">Logged activities</span>
+      <span class="metric-value">{{ loggedActivitiesCount }}</span>
+    </div>
+
+    <div class="metric-item">
+      <span class="metric-label">Activity streak</span>
+      <span class="metric-value">{{ activityStreakDisplay }}</span>
+    </div>
+  </div>
+
+  <!-- 2-Column Information Cards Grid -->
+  <div class="profile-cards-grid">
+    <!-- Card 1: Personal Information -->
+    <div class="info-card">
+      <h3 class="card-title">Personal information</h3>
+      <div class="info-table">
+        <div class="info-row">
+          <span class="info-label">Full name</span>
+          <span class="info-value">{{ fullName }}</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Contact number</span>
+          <span class="info-value">{{ contactNumber }}</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Alternate contact</span>
+          <span class="info-value">{{ alternateContact }}</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Email ID</span>
+          <span class="info-value">{{ emailDisplay }}</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Address</span>
+          <span class="info-value">{{ addressDisplay }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: Farm Details -->
+    <div class="info-card">
+      <h3 class="card-title">Farm details</h3>
+      <div class="info-table">
+        <div class="info-row">
+          <span class="info-label">Farm name</span>
+          <span class="info-value">{{ farmNameDisplay }}</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Crop types</span>
+          <span class="info-value">{{ cropTypesDisplay }}</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Irrigation</span>
+          <span class="info-value">{{ irrigationDisplay }}</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Certification</span>
+          <span class="info-value">{{ certificationDisplay }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Identity and Verification Card -->
+  <div class="verification-card">
+    <h3 class="card-title">Identity and verification</h3>
+    <div class="info-table">
+      <div class="info-row">
+        <span class="info-label">Government ID type</span>
+        <span class="info-value">{{ idTypeDisplay }}</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">Government ID number</span>
+        <span class="info-value">{{ idNumberDisplay }}</span>
+      </div>
+
+      <!-- Certificates / Health Reports -->
+      <div class="info-row" *ngFor="let cert of certificates">
+        <span class="info-label">{{ cert.label }}</span>
+        <a href="javascript:void(0)" class="document-link" (click)="downloadCertificate(cert.url)" [title]="'Download/View ' + cert.fileName">
+          <mat-icon class="doc-icon">description</mat-icon>
+          <span>{{ cert.fileName }}</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="verification-status-row">
+      <mat-icon class="verify-icon">{{ isIdentityVerified ? 'check_circle' : 'pending' }}</mat-icon>
+      <span class="verify-text">{{ isIdentityVerified ? 'Identity verified' : 'Pending verification' }}</span>
+    </div>
+  </div>
+
+  <!-- Account and Security Section -->
+  <div class="security-section">
+    <div class="security-header">
+      <div class="security-title-row">
+        <mat-icon class="security-lock-icon">lock_outline</mat-icon>
+        <div>
+          <h4 class="security-title">Account and security</h4>
+          <span class="security-subtitle">Only visible to you.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="security-table">
+      <div class="security-row">
+        <div class="security-row-left">
+          <span class="security-item-title">Password</span>
+          <span class="security-item-subtitle">{{ passwordLastChangedText() }}</span>
+        </div>
+        <button type="button" class="security-action-link" (click)="onChangePassword()">
+          Change password
+        </button>
+      </div>
+
+      <div class="security-row">
+        <div class="security-row-left">
+          <span class="security-item-title">Two-factor authentication</span>
+          <span class="security-item-subtitle">Not enabled</span>
+        </div>
+        <button type="button" class="security-action-link">
+          Enable
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
