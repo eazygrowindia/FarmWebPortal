@@ -24,6 +24,7 @@ import { FarmNoteService } from '../farm-note/farm-note.service';
 import { CropFarmSelectorService } from '../crop-farm-selector/crop-farm-selector.service';
 import { UserService } from '../users/user.service';
 import { UserProfileService } from '../user-profile/user-profile.service';
+import { CropMasterService, CropMaster } from '../master/update-crop-master/crop-master.service';
 import { environment } from '../../environments/environment';
 
 export interface GroupedActivity {
@@ -54,6 +55,13 @@ export interface CropDashboardItem {
   loadingActivities: boolean;
   loadingObservations: boolean;
   activeTab: 'activities' | 'observations';
+  sownOn?: string;
+  estimatedHarvest?: string;
+  estimatedYield?: string;
+  farmerName?: string;
+  progressPercent?: number;
+  cropArea?: number;
+  cropMasterId?: string;
 }
 
 export interface FarmDashboardItem {
@@ -104,6 +112,7 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
   private userProfileService = inject(UserProfileService);
   private http = inject(HttpClient);
   private cdr = inject(ChangeDetectorRef);
+  private cropMasterService = inject(CropMasterService);
 
   constructor() {
     effect(() => {
@@ -121,6 +130,8 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
   selectedOverviewFarmId = '';
   overviewFarmDetails: any = null;
   cropDetailsMap = new Map<string, any>();
+  cropMasters: CropMaster[] = [];
+  cropMasterMap = new Map<string, CropMaster>();
   usersMap = new Map<string, string>();
   currentUserName = '';
 
@@ -226,7 +237,37 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
 
   ngOnInit(): void {
     this.loadUsersAndProfile();
+    this.loadCropMasters();
     this.loadDashboardData();
+  }
+
+  loadCropMasters(): void {
+    this.cropMasterService.list().subscribe({
+      next: (masters) => {
+        this.cropMasters = Array.isArray(masters) ? masters : [];
+        this.cropMasterMap.clear();
+        for (const m of this.cropMasters) {
+          const masterId = m.cropId ?? (m as any).CropId ?? (m as any).id ?? (m as any).Id;
+          const masterName = m.cropName ?? (m as any).CropName ?? (m as any).name;
+          if (masterId) {
+            this.cropMasterMap.set(String(masterId).trim().toLowerCase(), m);
+          }
+          if (masterName) {
+            this.cropMasterMap.set(String(masterName).trim().toLowerCase(), m);
+          }
+        }
+        // Re-evaluate all loaded crops with master data
+        for (const farm of this.farms) {
+          for (const crop of farm.crops) {
+            this.populateCropDetails(crop);
+          }
+        }
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.warn('Could not load crop masters for dashboard calculations', err);
+      }
+    });
   }
 
   loadUsersAndProfile(): void {
@@ -318,6 +359,7 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
           this.http.get<any>(`${environment.baseApiUrl}api/Crop/${crop.cropId}`).subscribe({
             next: (cropData) => {
               this.cropDetailsMap.set(crop.cropId, cropData);
+              this.populateCropDetails(crop, cropData);
             },
             error: () => {}
           });
@@ -527,37 +569,202 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
     const defaultYields = ['300Kgs', '250Kgs', '350Kgs'];
 
     return farm.crops.map((crop, idx) => {
-      const extra = this.cropDetailsMap.get(crop.cropId);
-      let sownStr = '';
-      if (extra?.dateOfSowing) {
-        const d = new Date(extra.dateOfSowing);
-        sownStr = `${d.getDate()}th ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`;
-      } else {
-        sownStr = defaultSownDates[idx % defaultSownDates.length];
-      }
-
-      let harvestStr = '';
-      if (extra?.probableHarvestDate) {
-        const d = new Date(extra.probableHarvestDate);
-        harvestStr = `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`;
-      } else {
-        harvestStr = defaultHarvestDates[idx % defaultHarvestDates.length];
-      }
-
-      const yieldVal = extra?.expectedYield ? `${extra.expectedYield}Kgs` : defaultYields[idx % defaultYields.length];
-      const farmer = extra?.farmerName || defaultFarmers[idx % defaultFarmers.length];
-      const progress = idx === 0 ? 68 : 62;
-
+      this.populateCropDetails(crop, this.cropDetailsMap.get(crop.cropId));
       return {
         cropId: crop.cropId,
         cropName: crop.cropName,
-        farmerName: farmer,
-        sownOnFormatted: sownStr,
-        progressPercent: progress,
-        estYield: yieldVal,
-        estHarvestFormatted: harvestStr
+        farmerName: this.getCropFarmerName(crop),
+        sownOnFormatted: this.getCropSownOn(crop),
+        progressPercent: crop.progressPercent ?? (idx === 0 ? 68 : 62),
+        estYield: this.getCropEstimatedYield(crop),
+        estHarvestFormatted: this.getCropEstimatedHarvest(crop)
       };
     });
+  }
+
+  getCropIndex(crop: CropDashboardItem, fallbackIdx?: number): number {
+    for (const farm of this.farms) {
+      const idx = farm.crops.findIndex(c => c.cropId === crop.cropId);
+      if (idx >= 0) return idx;
+    }
+    return typeof fallbackIdx === 'number' ? fallbackIdx : 0;
+  }
+
+  findCropMaster(crop: CropDashboardItem, extra?: any): CropMaster | null {
+    if (!this.cropMasters || this.cropMasters.length === 0) {
+      return null;
+    }
+
+    const data = extra || this.cropDetailsMap.get(crop.cropId);
+
+    // 1. Match by cropMasterId
+    const masterId = String(
+      crop.cropMasterId ||
+      data?.cropMasterId ||
+      data?.CropMasterId ||
+      data?.cropMaster?.cropId ||
+      data?.cropMaster?.CropId ||
+      ''
+    ).trim().toLowerCase();
+
+    if (masterId && this.cropMasterMap.has(masterId)) {
+      return this.cropMasterMap.get(masterId)!;
+    }
+
+    // 2. Match by exact crop name
+    const rawCropName = String(crop.cropName || data?.cropName || data?.CropName || '').trim().toLowerCase();
+    if (rawCropName && this.cropMasterMap.has(rawCropName)) {
+      return this.cropMasterMap.get(rawCropName)!;
+    }
+
+    // 3. Match by partial crop name (e.g. "Turmeric (Salem)" matches "Turmeric")
+    if (rawCropName) {
+      for (const m of this.cropMasters) {
+        const mName = String(m.cropName ?? (m as any).CropName ?? '').trim().toLowerCase();
+        if (mName && (rawCropName.includes(mName) || mName.includes(rawCropName))) {
+          return m;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  populateCropDetails(crop: CropDashboardItem, cropData?: any, fallbackIdx?: number): void {
+    const defaultFarmers = ['Rajendra Soni', 'Pratibha', 'Suresh Patil', 'Mallikarjun'];
+    const defaultSownDates = ['12th Aug 2026', '19th Aug 2026', '25th Jul 2026'];
+    const defaultHarvestDates = ['18 Dec 2026', '01 Dec 2026', '15 Nov 2026'];
+    const defaultYields = ['300Kgs', '250Kgs', '350Kgs'];
+
+    const idx = this.getCropIndex(crop, fallbackIdx);
+    const extra = cropData || this.cropDetailsMap.get(crop.cropId);
+
+    if (!crop.cropMasterId) {
+      crop.cropMasterId = extra?.cropMasterId || extra?.CropMasterId;
+    }
+    if (!crop.cropArea) {
+      crop.cropArea = extra?.cropArea ?? extra?.CropArea ?? extra?.area;
+    }
+
+    const master = this.findCropMaster(crop, extra);
+
+    // Sown on
+    const rawSowing = extra?.dateOfSowing || extra?.DateOfSowing || (extra as any)?.sownDate;
+    if (rawSowing) {
+      const d = new Date(rawSowing);
+      crop.sownOn = !isNaN(d.getTime())
+        ? `${d.getDate()}th ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`
+        : String(rawSowing);
+    } else {
+      crop.sownOn = defaultSownDates[idx % defaultSownDates.length];
+    }
+
+    // Estimated harvest (from probableHarvestDate or dateOfSowing + duration)
+    const rawHarvest = extra?.probableHarvestDate || extra?.ProbableHarvestDate || (extra as any)?.harvestDate;
+    const duration = master?.duration ?? (master as any)?.Duration;
+    if (rawHarvest) {
+      const d = new Date(rawHarvest);
+      crop.estimatedHarvest = !isNaN(d.getTime())
+        ? `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`
+        : String(rawHarvest);
+    } else if (rawSowing && duration && Number(duration) > 0) {
+      const d = new Date(rawSowing);
+      if (!isNaN(d.getTime())) {
+        const harvestDate = new Date(d.getTime() + Number(duration) * 24 * 60 * 60 * 1000);
+        crop.estimatedHarvest = `${harvestDate.getDate()} ${harvestDate.toLocaleString('en-US', { month: 'short' })} ${harvestDate.getFullYear()}`;
+      }
+    }
+    if (!crop.estimatedHarvest) {
+      crop.estimatedHarvest = defaultHarvestDates[idx % defaultHarvestDates.length];
+    }
+
+    // Estimated yield: directly take from Crop Master's expected yield
+    const masterYield = master?.expectedYield ?? (master as any)?.ExpectedYield ?? (master as any)?.yield;
+    if (masterYield !== undefined && masterYield !== null && masterYield !== '') {
+      crop.estimatedYield = typeof masterYield === 'number' || !isNaN(Number(masterYield))
+        ? `${masterYield}Kgs`
+        : String(masterYield);
+    } else {
+      const rawYield = extra?.expectedYield ?? extra?.ExpectedYield ?? (extra as any)?.yield;
+      if (rawYield !== undefined && rawYield !== null && rawYield !== '' && !isNaN(Number(rawYield))) {
+        crop.estimatedYield = `${Number(rawYield)}Kgs`;
+      } else {
+        crop.estimatedYield = defaultYields[idx % defaultYields.length];
+      }
+    }
+
+    // Farmer Name & Progress
+    crop.farmerName = extra?.farmerName || defaultFarmers[idx % defaultFarmers.length];
+    crop.progressPercent = idx === 0 ? 68 : 62;
+  }
+
+  getCropSownOn(crop: CropDashboardItem): string {
+    const extra = this.cropDetailsMap.get(crop.cropId);
+    const rawSowing = extra?.dateOfSowing || extra?.DateOfSowing || (extra as any)?.sownDate;
+    if (rawSowing) {
+      const d = new Date(rawSowing);
+      if (!isNaN(d.getTime())) {
+        return `${d.getDate()}th ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`;
+      }
+      return String(rawSowing);
+    }
+    if (crop.sownOn) return crop.sownOn;
+    this.populateCropDetails(crop);
+    return crop.sownOn || '12th Aug 2026';
+  }
+
+  getCropEstimatedHarvest(crop: CropDashboardItem): string {
+    const extra = this.cropDetailsMap.get(crop.cropId);
+    const rawHarvest = extra?.probableHarvestDate || extra?.ProbableHarvestDate || (extra as any)?.harvestDate;
+    if (rawHarvest) {
+      const d = new Date(rawHarvest);
+      if (!isNaN(d.getTime())) {
+        return `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`;
+      }
+      return String(rawHarvest);
+    }
+    const rawSowing = extra?.dateOfSowing || extra?.DateOfSowing || (extra as any)?.sownDate;
+    const master = this.findCropMaster(crop, extra);
+    const duration = master?.duration ?? (master as any)?.Duration;
+    if (rawSowing && duration && Number(duration) > 0) {
+      const d = new Date(rawSowing);
+      if (!isNaN(d.getTime())) {
+        const harvestDate = new Date(d.getTime() + Number(duration) * 24 * 60 * 60 * 1000);
+        return `${harvestDate.getDate()} ${harvestDate.toLocaleString('en-US', { month: 'short' })} ${harvestDate.getFullYear()}`;
+      }
+    }
+    if (crop.estimatedHarvest) return crop.estimatedHarvest;
+    this.populateCropDetails(crop);
+    return crop.estimatedHarvest || '18 Dec 2026';
+  }
+
+  getCropEstimatedYield(crop: CropDashboardItem): string {
+    const extra = this.cropDetailsMap.get(crop.cropId);
+    const master = this.findCropMaster(crop, extra);
+
+    const masterYield = master?.expectedYield ?? (master as any)?.ExpectedYield ?? (master as any)?.yield;
+    if (masterYield !== undefined && masterYield !== null && masterYield !== '') {
+      return typeof masterYield === 'number' || !isNaN(Number(masterYield))
+        ? `${masterYield}Kgs`
+        : String(masterYield);
+    }
+
+    const rawYield = extra?.expectedYield ?? extra?.ExpectedYield ?? (extra as any)?.yield;
+    if (rawYield !== undefined && rawYield !== null && rawYield !== '' && !isNaN(Number(rawYield))) {
+      return `${Number(rawYield)}Kgs`;
+    }
+    if (crop.estimatedYield) return crop.estimatedYield;
+    this.populateCropDetails(crop);
+    return crop.estimatedYield || '300Kgs';
+  }
+
+  getCropFarmerName(crop: CropDashboardItem): string {
+    const extra = this.cropDetailsMap.get(crop.cropId);
+    if (extra?.farmerName) return extra.farmerName;
+    if (crop.farmerName) return crop.farmerName;
+    const defaultFarmers = ['Rajendra Soni', 'Pratibha', 'Suresh Patil', 'Mallikarjun'];
+    const idx = this.getCropIndex(crop);
+    return defaultFarmers[idx % defaultFarmers.length];
   }
 
   extractImageFromRecord(record: any): string | null {
@@ -1134,10 +1341,10 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
             );
           }
 
-          const crops: CropDashboardItem[] = cropsList.map(c => {
+          const crops: CropDashboardItem[] = cropsList.map((c, idx) => {
             const cropId = c.cropId || c.Id || c;
             const cropName = c.cropName || c.CropName || 'Unnamed Crop';
-            return {
+            const cropItem: CropDashboardItem = {
               cropId,
               cropName,
               activities: [],
@@ -1146,8 +1353,15 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
               groupedObservations: [],
               loadingActivities: true,
               loadingObservations: true,
-              activeTab: 'activities'
+              activeTab: 'activities',
+              cropArea: typeof c === 'object' && c !== null ? (c.cropArea ?? c.area ?? c.CropArea) : undefined,
+              cropMasterId: typeof c === 'object' && c !== null ? (c.cropMasterId ?? c.CropMasterId) : undefined
             };
+            if (typeof c === 'object' && c !== null && cropId) {
+              this.cropDetailsMap.set(cropId, { ...this.cropDetailsMap.get(cropId), ...c });
+            }
+            this.populateCropDetails(cropItem, typeof c === 'object' ? c : null, idx);
+            return cropItem;
           });
 
           return {
@@ -1194,6 +1408,21 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
           crop.loadingActivities = false;
           crop.loadingObservations = false;
           continue;
+        }
+
+        // Fetch crop details if not already cached
+        if (crop.cropId && !this.cropDetailsMap.has(crop.cropId)) {
+          this.http.get<any>(`${environment.baseApiUrl}api/Crop/${crop.cropId}`).subscribe({
+            next: (cropData) => {
+              this.cropDetailsMap.set(crop.cropId, cropData);
+              this.populateCropDetails(crop, cropData);
+            },
+            error: () => {
+              this.populateCropDetails(crop, null);
+            }
+          });
+        } else if (crop.cropId) {
+          this.populateCropDetails(crop, this.cropDetailsMap.get(crop.cropId));
         }
 
         // Fetch activities

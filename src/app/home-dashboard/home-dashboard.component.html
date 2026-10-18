@@ -431,6 +431,24 @@
                   <h3 class="crop-name">{{ crop.cropName }}</h3>
                   <span class="crop-id-label">Crop ID: {{ crop.cropId }}</span>
                 </div>
+
+                <div class="crop-meta-badges">
+                  <span class="crop-meta-pill" title="Sown on">
+                    <mat-icon class="meta-pill-icon">calendar_today</mat-icon>
+                    <span class="meta-label">Sown on:</span>
+                    <span class="meta-val">{{ getCropSownOn(crop) }}</span>
+                  </span>
+                  <span class="crop-meta-pill" title="Estimated harvest">
+                    <mat-icon class="meta-pill-icon">agriculture</mat-icon>
+                    <span class="meta-label">Estimated harvest:</span>
+                    <span class="meta-val">{{ getCropEstimatedHarvest(crop) }}</span>
+                  </span>
+                  <span class="crop-meta-pill" title="Estimated yield">
+                    <mat-icon class="meta-pill-icon">scale</mat-icon>
+                    <span class="meta-label">Estimated yield:</span>
+                    <span class="meta-val">{{ getCropEstimatedYield(crop) }}</span>
+                  </span>
+                </div>
               </div>
 
               <!-- Crop Header Stats -->

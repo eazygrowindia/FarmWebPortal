@@ -596,7 +596,8 @@
 .crop-card-title-group {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1.25rem;
+  flex-wrap: wrap;
 }
 
 .crop-icon {
@@ -622,6 +623,42 @@
   font-size: 0.75rem;
   color: #94a3b8;
   font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.crop-meta-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.crop-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.crop-meta-pill .meta-pill-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  color: #16a34a;
+}
+
+.crop-meta-pill .meta-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.crop-meta-pill .meta-val {
+  color: #0f172a;
+  font-weight: 600;
 }
 
 /* Crop Header Stats */
