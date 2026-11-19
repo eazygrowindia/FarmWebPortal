@@ -1,6 +1,7 @@
 // home-dashboard.component.ts
 import { AfterViewInit, ChangeDetectorRef, Component, effect, ElementRef, inject, OnInit, ViewChild } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -113,6 +114,7 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
   private http = inject(HttpClient);
   private cdr = inject(ChangeDetectorRef);
   private cropMasterService = inject(CropMasterService);
+  private route = inject(ActivatedRoute, { optional: true });
 
   constructor() {
     effect(() => {
@@ -125,8 +127,8 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
     });
   }
 
-  // View Mode: 'overview' (landing page design from image) or 'allFarms' (all farms list view)
-  viewMode: 'overview' | 'allFarms' = 'overview';
+  // View Mode: 'allFarms' (all farms list view - default on landing) or 'overview' (single farm overview design)
+  viewMode: 'overview' | 'allFarms' = 'allFarms';
   selectedOverviewFarmId = '';
   overviewFarmDetails: any = null;
   cropDetailsMap = new Map<string, any>();
@@ -143,6 +145,7 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
 
   // Farm Notes editing & FarmNoteController persistence state
   farmNotesMap = new Map<string, FarmNote[]>();
+  farmLastSeenMap = new Map<string, number>();
   isEditingNotes = false;
   editingNotesList: { noteId?: string; note: string }[] = [];
   isSavingNotes = false;
@@ -236,6 +239,15 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
   }
 
   ngOnInit(): void {
+    if (this.route) {
+      this.route.queryParamMap.subscribe(params => {
+        const viewParam = params.get('view') || params.get('mode');
+        if (viewParam === 'overview' || viewParam === 'allFarms') {
+          this.viewMode = viewParam;
+          this.cdr.markForCheck();
+        }
+      });
+    }
     this.loadUsersAndProfile();
     this.loadCropMasters();
     this.loadDashboardData();
@@ -1432,12 +1444,14 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
             crop.groupedActivities = this.groupActivitiesByDate(crop.activities);
             crop.loadingActivities = false;
             setTimeout(() => this.updateActivitiesScrollState(), 150);
+            this.cdr.markForCheck();
           },
           error: (err) => {
             console.error(`Failed to load activities for crop ${crop.cropId}`, err);
             crop.activities = [];
             crop.groupedActivities = [];
             crop.loadingActivities = false;
+            this.cdr.markForCheck();
           }
         });
 
@@ -1447,12 +1461,14 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
             crop.observations = Array.isArray(observations) ? observations : [];
             crop.groupedObservations = this.groupObservationsByDate(crop.observations);
             crop.loadingObservations = false;
+            this.cdr.markForCheck();
           },
           error: (err) => {
             console.error(`Failed to load observations for crop ${crop.cropId}`, err);
             crop.observations = [];
             crop.groupedObservations = [];
             crop.loadingObservations = false;
+            this.cdr.markForCheck();
           }
         });
       }
@@ -1535,6 +1551,155 @@ export class HomeDashboardComponent implements OnInit, AfterViewInit {
 
   toggleFarmExpand(farm: FarmDashboardItem): void {
     farm.expanded = !farm.expanded;
+  }
+
+  // ==================== UNSEEN ACTIVITIES & OBSERVATIONS NOTIFICATION ====================
+  getFarmSeenStorageKey(farmId: string): string {
+    const user = this.auth.currentUser?.userId || 'default';
+    return `eg_farm_last_seen_${user}_${farmId}`;
+  }
+
+  getFarmLastSeenTime(farmId: string): number {
+    if (this.farmLastSeenMap.has(farmId)) {
+      return this.farmLastSeenMap.get(farmId)!;
+    }
+    try {
+      const key = this.getFarmSeenStorageKey(farmId);
+      const val = localStorage.getItem(key);
+      if (val) {
+        const num = Number(val);
+        if (!isNaN(num) && num > 0) {
+          this.farmLastSeenMap.set(farmId, num);
+          return num;
+        }
+      }
+    } catch {}
+    return 0;
+  }
+
+  private getItemTimestamp(item: any): number {
+    if (!item) return 0;
+    const dateVal = item.createdAt || item.updatedAt || item.date || item.dateTime;
+    return dateVal ? new Date(dateVal).getTime() : 0;
+  }
+
+  getFarmLatestItemTime(farm: FarmDashboardItem): number {
+    let latest = 0;
+    for (const crop of (farm.crops || [])) {
+      for (const act of (crop.activities || [])) {
+        const t = this.getItemTimestamp(act);
+        if (t > latest) latest = t;
+      }
+      for (const obs of (crop.observations || [])) {
+        const t = this.getItemTimestamp(obs);
+        if (t > latest) latest = t;
+      }
+    }
+    return latest;
+  }
+
+  getFarmUnseenStats(farm: FarmDashboardItem): { unseenActivities: number; unseenObservations: number; totalUnseen: number } {
+    const lastSeen = this.getFarmLastSeenTime(farm.farmId);
+    let unseenActivities = 0;
+    let unseenObservations = 0;
+
+    for (const crop of (farm.crops || [])) {
+      for (const act of (crop.activities || [])) {
+        const t = this.getItemTimestamp(act);
+        if (t > lastSeen) {
+          unseenActivities++;
+        }
+      }
+      for (const obs of (crop.observations || [])) {
+        const t = this.getItemTimestamp(obs);
+        if (t > lastSeen) {
+          unseenObservations++;
+        }
+      }
+    }
+
+    return {
+      unseenActivities,
+      unseenObservations,
+      totalUnseen: unseenActivities + unseenObservations
+    };
+  }
+
+  getFarmUnseenCount(farm: FarmDashboardItem): number {
+    return this.getFarmUnseenStats(farm).totalUnseen;
+  }
+
+  getFarmUnseenTooltip(farm: FarmDashboardItem): string {
+    const stats = this.getFarmUnseenStats(farm);
+    if (stats.totalUnseen === 0) {
+      return 'No unseen updates • All activities and observations seen';
+    }
+    const parts: string[] = [];
+    if (stats.unseenActivities > 0) {
+      parts.push(`${stats.unseenActivities} ${stats.unseenActivities === 1 ? 'activity' : 'activities'}`);
+    }
+    if (stats.unseenObservations > 0) {
+      parts.push(`${stats.unseenObservations} ${stats.unseenObservations === 1 ? 'observation' : 'observations'}`);
+    }
+    return `${stats.totalUnseen} unseen ${stats.totalUnseen === 1 ? 'update' : 'updates'} (${parts.join(', ')}) • Click to view`;
+  }
+
+  isItemUnseen(farmId: string, item: any): boolean {
+    const lastSeen = this.getFarmLastSeenTime(farmId);
+    const t = this.getItemTimestamp(item);
+    return t > 0 && t > lastSeen;
+  }
+
+  isGroupUnseen(farmId: string, group: GroupedActivity | GroupedObservation): boolean {
+    if (!group || !Array.isArray(group.originalRecords)) return false;
+    return group.originalRecords.some(r => this.isItemUnseen(farmId, r));
+  }
+
+  getCropUnseenCount(farmId: string, crop: CropDashboardItem): number {
+    const lastSeen = this.getFarmLastSeenTime(farmId);
+    let count = 0;
+    for (const act of (crop.activities || [])) {
+      if (this.getItemTimestamp(act) > lastSeen) count++;
+    }
+    for (const obs of (crop.observations || [])) {
+      if (this.getItemTimestamp(obs) > lastSeen) count++;
+    }
+    return count;
+  }
+
+  onFarmBellClick(farm: FarmDashboardItem, event: MouseEvent): void {
+    event.stopPropagation();
+    const count = this.getFarmUnseenCount(farm);
+    if (count > 0) {
+      if (!farm.expanded) {
+        farm.expanded = true;
+      }
+      this.markFarmAsSeen(farm);
+    } else {
+      farm.expanded = !farm.expanded;
+    }
+  }
+
+  markFarmAsSeen(farm: FarmDashboardItem, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    const latestItemTime = this.getFarmLatestItemTime(farm);
+    const markTime = Math.max(Date.now(), latestItemTime);
+    const key = this.getFarmSeenStorageKey(farm.farmId);
+    try {
+      localStorage.setItem(key, String(markTime));
+    } catch {}
+    this.farmLastSeenMap.set(farm.farmId, markTime);
+    this.cdr.markForCheck();
+  }
+
+  markFarmAsUnseen(farm: FarmDashboardItem, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    const key = this.getFarmSeenStorageKey(farm.farmId);
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    this.farmLastSeenMap.delete(farm.farmId);
+    this.cdr.markForCheck();
   }
 
   selectCrop(farm: FarmDashboardItem, cropId: string): void {

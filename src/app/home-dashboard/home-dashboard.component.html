@@ -3,13 +3,13 @@
   <!-- Top View Mode & Farm Switcher Bar -->
   <div class="view-mode-bar">
     <div class="mode-toggle-group">
-      <button type="button" class="mode-btn" [class.active]="viewMode === 'overview'" (click)="setViewMode('overview')">
-        <mat-icon class="mode-icon">dashboard_customize</mat-icon>
-        <span>Farm Overview</span>
-      </button>
       <button type="button" class="mode-btn" [class.active]="viewMode === 'allFarms'" (click)="setViewMode('allFarms')">
         <mat-icon class="mode-icon">view_agenda</mat-icon>
         <span>View All Farms</span>
+      </button>
+      <button type="button" class="mode-btn" [class.active]="viewMode === 'overview'" (click)="setViewMode('overview')">
+        <mat-icon class="mode-icon">dashboard_customize</mat-icon>
+        <span>Farm Overview</span>
       </button>
     </div>
   </div>
@@ -369,11 +369,32 @@
                 <mat-icon class="meta-icon">eco</mat-icon>
                 {{ farm.crops.length }} {{ farm.crops.length === 1 ? 'Crop' : 'Crops' }} Registered
               </span>
+              @if (getFarmUnseenCount(farm) > 0) {
+              <span class="unseen-meta-pill" [matTooltip]="getFarmUnseenTooltip(farm)" (click)="onFarmBellClick(farm, $event)">
+                <span class="unseen-pulse-dot"></span>
+                {{ getFarmUnseenCount(farm) }} New {{ getFarmUnseenCount(farm) === 1 ? 'Update' : 'Updates' }}
+              </span>
+              }
             </div>
           </div>
         </div>
 
         <div class="farm-header-right">
+          <!-- Notification Bell Button -->
+          <button type="button" class="farm-bell-btn"
+            [class.has-unseen]="getFarmUnseenCount(farm) > 0"
+            [matTooltip]="getFarmUnseenTooltip(farm)"
+            (click)="onFarmBellClick(farm, $event)"
+            [attr.aria-label]="getFarmUnseenTooltip(farm)">
+            <mat-icon class="bell-icon">{{ getFarmUnseenCount(farm) > 0 ? 'notifications_active' : 'notifications_none' }}</mat-icon>
+            @if (getFarmUnseenCount(farm) > 0) {
+            <span class="bell-badge-count">
+              {{ getFarmUnseenCount(farm) > 99 ? '99+' : getFarmUnseenCount(farm) }}
+            </span>
+            }
+          </button>
+
+          <!-- Collapse Toggle Button -->
           <button type="button" class="collapse-toggle-btn"
             [attr.aria-label]="farm.expanded ? 'Collapse farm' : 'Expand farm'"
             [matTooltip]="farm.expanded ? 'Hide details' : 'Show details'"
@@ -414,6 +435,16 @@
             <span class="pill-badge" title="Activities / Observations">
               {{ crop.activities.length }}/{{ crop.observations.length }}
             </span>
+            @if (getCropUnseenCount(farm.farmId, crop) > 0) {
+            <span class="crop-unseen-dot" [matTooltip]="getCropUnseenCount(farm.farmId, crop) + ' unseen items'"></span>
+            }
+          </button>
+          }
+
+          @if (getFarmUnseenCount(farm) > 0) {
+          <button type="button" class="btn-mark-farm-seen" (click)="markFarmAsSeen(farm, $event)" [matTooltip]="'Mark all activities & observations for this farm as seen'">
+            <mat-icon class="mark-seen-icon">done_all</mat-icon>
+            <span>Mark as seen</span>
           </button>
           }
         </div>
@@ -448,6 +479,12 @@
                     <span class="meta-label">Estimated yield:</span>
                     <span class="meta-val">{{ getCropEstimatedYield(crop) }}</span>
                   </span>
+                  @if (farm.crops.length === 1 && getFarmUnseenCount(farm) > 0) {
+                  <button type="button" class="btn-mark-farm-seen" (click)="markFarmAsSeen(farm, $event)" [matTooltip]="'Mark all activities & observations as seen'">
+                    <mat-icon class="mark-seen-icon">done_all</mat-icon>
+                    <span>Mark as seen</span>
+                  </button>
+                  }
                 </div>
               </div>
 
@@ -516,6 +553,10 @@
                                 }
                               </span>
                               }
+
+                              @if (isItemUnseen(farm.farmId, group.originalRecords[0])) {
+                              <span class="unseen-item-tag">NEW</span>
+                              }
                             </div>
 
                             <time class="item-date">
@@ -555,6 +596,10 @@
                               <span class="group-date-text">{{ group.date }}</span>
                             </div>
                             <span class="group-count-pill">{{ group.originalRecords.length }} activities</span>
+
+                            @if (isGroupUnseen(farm.farmId, group)) {
+                            <span class="unseen-item-tag">NEW</span>
+                            }
 
                             <div class="group-types-chips">
                               @for (type of group.uniqueTypes; track type) {
@@ -608,6 +653,10 @@
                                   <strong class="qty-highlight">({{ act.quantity }})</strong>
                                   }
                                 </span>
+                                }
+
+                                @if (isItemUnseen(farm.farmId, act)) {
+                                <span class="unseen-item-tag">NEW</span>
                                 }
                               </div>
 
@@ -684,6 +733,9 @@
                                   }}</mat-icon>
                                 {{ group.originalRecords[0].observationType }}
                               </span>
+                              @if (isItemUnseen(farm.farmId, group.originalRecords[0])) {
+                              <span class="unseen-item-tag">NEW</span>
+                              }
                             </div>
 
                             <time class="item-date">
@@ -746,6 +798,10 @@
                             </div>
                             <span class="group-count-pill">{{ group.originalRecords.length }} observations</span>
 
+                            @if (isGroupUnseen(farm.farmId, group)) {
+                            <span class="unseen-item-tag">NEW</span>
+                            }
+
                             <div class="group-types-chips">
                               @for (type of group.uniqueTypes; track type) {
                               <span class="type-mini-badge" [ngClass]="getObservationBadgeClass(type)">
@@ -795,6 +851,9 @@
                                   <mat-icon class="badge-icon">{{ getObservationIcon(obs.observationType) }}</mat-icon>
                                   {{ obs.observationType }}
                                 </span>
+                                @if (isItemUnseen(farm.farmId, obs)) {
+                                <span class="unseen-item-tag">NEW</span>
+                                }
                               </div>
 
                               <time class="item-date">
