@@ -1,73 +1,96 @@
-<h2 mat-dialog-title>
-      {{ data.mode === 'create' ? 'Create User' : 'Edit User' }}
-    </h2>
-    
-    <mat-dialog-content>
-      <form [formGroup]="userForm()">
+<div class="dialog-container">
+  <!-- Dialog Header -->
+  <div class="custom-dialog-header">
+    <div class="header-icon-wrap" [class.header-edit-mode]="data.mode === 'edit'">
+      <mat-icon>{{ data.mode === 'create' ? 'person_add' : 'manage_accounts' }}</mat-icon>
+    </div>
+    <div>
+      <h2 class="dialog-title">{{ data.mode === 'create' ? 'Create New User' : 'Edit User Profile' }}</h2>
+      <p class="dialog-subtitle">
+        {{ data.mode === 'create' ? 'Fill out the form below to register a new user in the platform' : 'Update details and role permissions for user' }}
+      </p>
+    </div>
+  </div>
 
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Name</mat-label>
-          <input matInput formControlName="name" required>
-          @if (nameControl()?.hasError('required') && nameControl()?.touched) {
-            <mat-error>Name is required</mat-error>
-          }
-          @if (nameControl()?.hasError('minlength') && nameControl()?.touched) {
-              <mat-error>Name must be at least 5 characters</mat-error>
-            }
+  <mat-dialog-content class="custom-dialog-content">
+    <form [formGroup]="userForm()" class="user-form-layout">
+      <!-- Full Name Field -->
+      <mat-form-field appearance="outline" class="form-field full-width">
+        <mat-label>Full Name</mat-label>
+        <input matInput formControlName="name" placeholder="Enter user's full name" required />
+        <mat-icon matSuffix class="field-icon">badge</mat-icon>
+        <mat-error *ngIf="nameControl()?.hasError('required') && nameControl()?.touched">
+          Full Name is required
+        </mat-error>
+        <mat-error *ngIf="nameControl()?.hasError('minlength') && nameControl()?.touched">
+          Name must be at least 5 characters
+        </mat-error>
+      </mat-form-field>
+
+      <!-- Mobile & Email in 2 columns -->
+      <div class="form-row-2">
+        <mat-form-field appearance="outline" class="form-field">
+          <mat-label>Mobile Number</mat-label>
+          <input matInput formControlName="mobile" placeholder="e.g. +919876543210" required />
+          <mat-icon matSuffix class="field-icon">phone</mat-icon>
+          <mat-error *ngIf="mobileControl()?.hasError('required') && mobileControl()?.touched">
+            Mobile is required
+          </mat-error>
+          <mat-error *ngIf="mobileControl()?.hasError('pattern') && mobileControl()?.touched">
+            Invalid mobile number format
+          </mat-error>
+          <mat-hint *ngIf="data.mode === 'edit'">Mobile cannot be changed</mat-hint>
         </mat-form-field>
 
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Mobile</mat-label>
-            <input matInput formControlName="mobile" [disabled]="true" required>
-            @if (mobileControl()?.hasError('required') && mobileControl()?.touched) {
-                <mat-error>Mobile is required</mat-error>
-            }
-            @if (mobileControl()?.hasError('pattern') && mobileControl()?.touched) {
-                <mat-error>Invalid mobile number</mat-error>
-            }
-          </mat-form-field>
-        
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Email</mat-label>
-          <input matInput formControlName="email" type="email">
-          @if (emailControl()?.hasError('email') && emailControl()?.touched) {
-            <mat-error>Invalid email</mat-error>
-          }
+        <mat-form-field appearance="outline" class="form-field">
+          <mat-label>Email Address</mat-label>
+          <input matInput formControlName="email" type="email" placeholder="name@example.com" />
+          <mat-icon matSuffix class="field-icon">email</mat-icon>
+          <mat-error *ngIf="emailControl()?.hasError('email') && emailControl()?.touched">
+            Invalid email address format
+          </mat-error>
         </mat-form-field>
-        
-        @if (data.mode === 'create') {
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Password</mat-label>
-            <input matInput formControlName="password" type="password" required>
-            @if (passwordControl()?.hasError('required') && passwordControl()?.touched) {
-              <mat-error>Password is required (min 8 chars)</mat-error>
-            }
-            @if (passwordControl()?.hasError('minlength') && passwordControl()?.touched) {
-              <mat-error>Password must be at least 8 characters</mat-error>
-            }
-          </mat-form-field>
-        }
-        
-        <div class="roles-section">
-          <h3>Roles</h3>
-          <div>
-            <mat-radio-group formControlName="role" class="role-radio-group">
-                @for (role of availableRoles(); track role) {
-                  <mat-radio-button [value]="role">
-                    {{ getRoleDisplayName(role) }}
-                  </mat-radio-button>
-                }
-              </mat-radio-group>
-          </div>
+      </div>
+
+      <!-- Password Field (Create mode only) -->
+      <mat-form-field *ngIf="data.mode === 'create'" appearance="outline" class="form-field full-width">
+        <mat-label>Initial Password</mat-label>
+        <input matInput formControlName="password" type="password" placeholder="At least 8 characters" required />
+        <mat-icon matSuffix class="field-icon">lock</mat-icon>
+        <mat-error *ngIf="passwordControl()?.hasError('required') && passwordControl()?.touched">
+          Password is required (minimum 8 characters)
+        </mat-error>
+        <mat-error *ngIf="passwordControl()?.hasError('minlength') && passwordControl()?.touched">
+          Password must be at least 8 characters
+        </mat-error>
+      </mat-form-field>
+
+      <!-- Role Selection Section -->
+      <div class="roles-picker-section">
+        <label class="roles-picker-label">
+          <mat-icon class="label-icon">security</mat-icon>
+          <span>Select Primary Role</span>
+        </label>
+        <div class="role-options-grid">
+          <mat-radio-group formControlName="role" class="custom-radio-group">
+            <div *ngFor="let role of availableRoles()" class="role-radio-item" [class.role-selected]="userForm().get('role')?.value === role">
+              <mat-radio-button [value]="role" color="primary">
+                <span class="role-item-title">{{ getRoleDisplayName(role) }}</span>
+              </mat-radio-button>
+            </div>
+          </mat-radio-group>
         </div>
-      </form>
-    </mat-dialog-content>
-    
-    <mat-dialog-actions align="end">
-      <button mat-button (click)="onCancel()">Cancel</button>
-      <button mat-raised-button color="primary" 
-              [disabled]="userForm().invalid || isSubmitting()"
-              (click)="onSave()">
-        {{ data.mode === 'create' ? 'Create User' : 'Update User' }}
-      </button>
-    </mat-dialog-actions>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions class="custom-dialog-actions">
+    <button mat-stroked-button class="btn-cancel" (click)="onCancel()">Cancel</button>
+    <button mat-raised-button color="primary" class="btn-submit"
+      [disabled]="userForm().invalid || isSubmitting()"
+      (click)="onSave()">
+      <mat-icon *ngIf="!isSubmitting()">{{ data.mode === 'create' ? 'check' : 'save' }}</mat-icon>
+      <span>{{ isSubmitting() ? 'Saving...' : (data.mode === 'create' ? 'Create User' : 'Save Changes') }}</span>
+    </button>
+  </mat-dialog-actions>
+</div>

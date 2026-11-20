@@ -9,6 +9,9 @@ export interface User {
   roles: UserRole[];  // Array of UserRole union type
   status?: string;
   systemStatus?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastLoginAt?: string;
 }
 
 export interface CreateUserRequest {
